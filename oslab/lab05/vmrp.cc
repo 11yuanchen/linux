@@ -1,45 +1,52 @@
 #include "vmrp.h"
 #include <ctime>
 #include <algorithm>
+#include <iomanip>
 
 Replace::Replace() {
-    int i;
-    std::cout << "Please input page numbers :";
-    std::cin >> PageNumber;
+    std::cout << "=== Page Replacement Algorithm Simulator (Auto Mode) ===" << std::endl;
+    
+    // 自动生成参数
+    PageNumber = 12;                          // 默认12个页面引用
+    int max_page = 5;                         // 页面号范围1~5
+    FrameNumber = 4;                          // 默认4个内存帧
+
+    // 随机生成引用串
     ReferencePage = new int[PageNumber];
     EliminatePage = new int[PageNumber];
+    GenerateRandomRef(PageNumber, max_page);
 
-    std::cout << "Please input reference page string :";
-    for (i = 0; i < PageNumber; i++)
-        std::cin >> ReferencePage[i];
-
-    std::cout << "Please input page frames :";
-    std::cin >> FrameNumber;
+    // 分配内存帧
     PageFrames = new int[FrameNumber];
 }
 
 Replace::~Replace() {
-    delete [] ReferencePage;
-    delete [] EliminatePage;
-    delete [] PageFrames;
+    delete[] ReferencePage;
+    delete[] EliminatePage;
+    delete[] PageFrames;
+}
+
+void Replace::GenerateRandomRef(int length, int max_page) {
+    std::srand(std::time(0));
+    std::cout << "Generated reference string: ";
+    for (int i = 0; i < length; i++) {
+        ReferencePage[i] = std::rand() % max_page + 1;
+        std::cout << ReferencePage[i] << " ";
+    }
+    std::cout << "\nMemory frames: " << FrameNumber << std::endl;
 }
 
 void Replace::InitSpace(const char *MethodName) {
-    std::cout << std::endl << MethodName << std::endl;
+    std::cout << "\n===== " << MethodName << " =====" << std::endl;
     FaultNumber = 0;
-    for (int i = 0; i < PageNumber; i++)
-        EliminatePage[i] = -1;
-    for (int i = 0; i < FrameNumber; i++)
-        PageFrames[i] = -1;
+    std::fill_n(EliminatePage, PageNumber, -1);
+    std::fill_n(PageFrames, FrameNumber, -1);
 }
 
 void Replace::Report() {
-    std::cout << std::endl << "Eliminate page:";
-    for (int i = 0; EliminatePage[i] != -1; i++)
-        std::cout << EliminatePage[i] << " ";
-    std::cout << std::endl << "Number of page faults = " << FaultNumber << std::endl;
-    std::cout << std::fixed << std::setprecision(2);
-    std::cout << "Rate of page faults = " << 100.0f * FaultNumber / PageNumber << "%" << std::endl;
+    std::cout << "-> Page faults: " << FaultNumber 
+              << " (" << std::fixed << std::setprecision(1) 
+              << 100.0 * FaultNumber / PageNumber << "%)" << std::endl;
 }
 
 void Replace::Fifo() {
@@ -262,17 +269,19 @@ void Replace::Lfu() {
     delete[] frequency;
     Report();
 }
-
 void Replace::Mfu() {
     InitSpace("MFU");
-    int *frequency = new int[FrameNumber];
+    int *frequency = new int[FrameNumber](); // 频率计数器初始化为0
     int eliminateIndex = 0;
-    for (int i = 0; i < FrameNumber; i++) frequency[i] = 0;
+
+    // 调试输出确认参数
+    std::cout << "[DEBUG] FrameNumber=" << FrameNumber << ", PageNumber=" << PageNumber << std::endl;
 
     for (int k = 0; k < PageNumber; k++) {
         int next = ReferencePage[k];
         bool found = false;
-        
+
+        // 1. 检查页面是否已在内存
         for (int i = 0; i < FrameNumber; i++) {
             if (PageFrames[i] == next) {
                 found = true;
@@ -281,42 +290,53 @@ void Replace::Mfu() {
             }
         }
 
+        // 2. 处理缺页
         if (!found) {
             FaultNumber++;
             int replaceIdx = 0;
-            for (int i = 1; i < FrameNumber; i++) {
-                if (frequency[i] > frequency[replaceIdx])
+            bool hasFreeFrame = false;
+
+            // 2.1 优先使用空闲帧
+            for (int i = 0; i < FrameNumber; i++) {
+                if (PageFrames[i] == -1) {
                     replaceIdx = i;
+                    hasFreeFrame = true;
+                    break;
+                }
             }
-            if (PageFrames[replaceIdx] != -1)
+
+            // 2.2 若无空闲帧，选择频率最高的页替换
+            if (!hasFreeFrame) {
+                for (int i = 1; i < FrameNumber; i++) {
+                    if (frequency[i] > frequency[replaceIdx]) {
+                        replaceIdx = i;
+                    }
+                }
                 EliminatePage[eliminateIndex++] = PageFrames[replaceIdx];
+            }
+
+            // 2.3 装入新页面并重置频率
             PageFrames[replaceIdx] = next;
             frequency[replaceIdx] = 1;
         }
-        
+
+        // 3. 输出当前状态
+        std::cout << "Step " << k + 1 << ": ";
         for (int i = 0; i < FrameNumber; i++) {
-            if (PageFrames[i] != -1)
+            if (PageFrames[i] != -1) {
                 std::cout << PageFrames[i] << "(" << frequency[i] << ") ";
+            }
         }
-        if (!found && eliminateIndex > 0 && EliminatePage[eliminateIndex-1] != -1)
-            std::cout << "->" << EliminatePage[eliminateIndex-1];
+        if (!found && eliminateIndex > 0 && EliminatePage[eliminateIndex - 1] != -1) {
+            std::cout << "-> " << EliminatePage[eliminateIndex - 1];
+        }
         std::cout << std::endl;
     }
+
     delete[] frequency;
     Report();
 }
 
-void Replace::GenerateRandomRef(int length, int max_page) {
-    std::srand(std::time(0));
-    PageNumber = length;
-    ReferencePage = new int[PageNumber];
-    std::cout << "Generated reference string: ";
-    for (int i = 0; i < PageNumber; i++) {
-        ReferencePage[i] = std::rand() % max_page + 1;
-        std::cout << ReferencePage[i] << " ";
-    }
-    std::cout << std::endl;
-}
 
 int main() {
     Replace *vmpr = new Replace();
